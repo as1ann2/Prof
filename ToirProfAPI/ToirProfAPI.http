@@ -1,0 +1,6 @@
+@ToirProfAPI_HostAddress = http://localhost:5056
+
+GET {{ToirProfAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

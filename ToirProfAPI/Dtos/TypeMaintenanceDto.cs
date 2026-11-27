@@ -8,6 +8,7 @@ public class TypeMaintenanceDto
     public string? Description { get; set; }
     public int PeriodDay { get; set; }
     public int PlanTimeInHours { get; set; }
+    
     public bool StopEquipment { get; set; }
     public bool IsActive { get; set; }
 }

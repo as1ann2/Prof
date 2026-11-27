@@ -12,6 +12,7 @@ using ToirProfAPI.Models;
 namespace ToirProfAPI.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize]
     [ApiController]
     
     public class EquipmentsController : ControllerBase
@@ -24,7 +25,7 @@ namespace ToirProfAPI.Controllers
         }
 
         // GET: api/Equipments
-        [Authorize]
+        
         [HttpGet]
         public async Task<ActionResult<ApiResponce<List<EquipmnetDto>>>> GetEquipments(string? status, string? search, int? workshopId, string? model)
         {

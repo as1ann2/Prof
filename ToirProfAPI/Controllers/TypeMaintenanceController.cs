@@ -2,14 +2,17 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using ToirProfAPI.Dtos;
 using ToirProfAPI.Models;
 
 namespace ToirProfAPI.Controllers
 {
     [Route("api/[controller]")]
+    [Authorize]
     [ApiController]
     public class TypeMaintenanceController : ControllerBase
     {
@@ -21,10 +24,28 @@ namespace ToirProfAPI.Controllers
         }
 
         // GET: api/TypeMaintenance
+        [Authorize]
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<TypeMaintenance>>> GetTypeMaintenances()
+        public async Task<ActionResult<ApiResponce<List<TypeMaintenanceDto>>>> GetTypeMaintenances(bool onlyActive = false)
         {
-            return await _context.TypeMaintenances.ToListAsync();
+            var query = _context.TypeMaintenances.AsQueryable();
+            if (onlyActive)
+                query = query.Where(t=> t.IsActive == true);
+            
+            var types = await query.Select(t => new TypeMaintenanceDto
+            {
+                Id = t.Id,
+                Code = t.Code,
+                Name = t.Name,
+                Description = t.Description,
+                PeriodDay = t.PeriodDay,
+                PlanTimeInHours = t.PlanTimeInHours,
+                StopEquipment = t.StopEquiment ?? false,
+                IsActive = t.IsActive ?? false,
+            })
+            .ToListAsync();
+            return Ok(ApiResponce<List<TypeMaintenanceDto>>.Ok(types));
+    
         }
 
         // GET: api/TypeMaintenance/5
@@ -74,29 +95,71 @@ namespace ToirProfAPI.Controllers
 
         // POST: api/TypeMaintenance
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        [Authorize(Roles = "инженер, администратор")]
         [HttpPost]
-        public async Task<ActionResult<TypeMaintenance>> PostTypeMaintenance(TypeMaintenance typeMaintenance)
+        public async Task<ActionResult<CreateTypeMaintenanceDto>> CreateTypeMaintenance(CreateTypeMaintenanceDto dto)
         {
-            _context.TypeMaintenances.Add(typeMaintenance);
+            
+            if(string.IsNullOrWhiteSpace(dto.Name))
+                return BadRequest(ApiResponce<CreateTypeMaintenanceDto>.Fail("Недопустимое имя", "VALLIDATION_ERROR"));
+            if (dto.PeriodDay <= 0 || dto.PlanTimeInHours <= 0)
+                return BadRequest(ApiResponce<CreateTypeMaintenanceDto>.Fail(
+                    "Периодичность и плановая длительность должны быть больше нуля", "VALLIDATION_ERROR"));
+            if(!string.IsNullOrWhiteSpace(dto.Code) &&
+                await _context.TypeMaintenances.AnyAsync(t => t.Code == dto.Code))
+                return Conflict(ApiResponce<CreateTypeMaintenanceDto>.Fail("Код уже используется другим видом ТО", "CONFLICT"));
+
+            var type = new TypeMaintenance()
+            {
+                Code = dto.Code,
+                Name = dto.Name,
+                Description = dto.Description,
+                PeriodDay = dto.PeriodDay,
+                PlanTimeInHours = dto.PlanTimeInHours,
+                StopEquiment = dto.StopEquipment,
+                IsActive = dto.IsActive 
+            };
+            
+            _context.TypeMaintenances.Add(type);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetTypeMaintenance", new { id = typeMaintenance.Id }, typeMaintenance);
+            var result = new TypeMaintenanceDto()
+            {
+                Code = type.Code,
+                Name = type.Name,
+                Description = type.Description,
+                PeriodDay = type.PeriodDay,
+                PlanTimeInHours = type.PlanTimeInHours,
+                StopEquipment = type.StopEquiment ?? false,
+                IsActive = type.IsActive ?? false
+            };
+            
+            return CreatedAtAction(nameof(GetTypeMaintenance), new { id = type.Id },
+                ApiResponce<TypeMaintenanceDto>.Ok(result, "Вид ТО создан"));
+            
         }
 
         // DELETE: api/TypeMaintenance/5
+        [Authorize(Roles = "администратор, инженер")]
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteTypeMaintenance(int id)
         {
             var typeMaintenance = await _context.TypeMaintenances.FindAsync(id);
             if (typeMaintenance == null)
             {
-                return NotFound();
+                return NotFound(ApiResponce<object>.Fail("ТО не найдено", "NOT_FOUND"));
             }
 
-            _context.TypeMaintenances.Remove(typeMaintenance);
+            if (typeMaintenance.IsActive == false)
+            {
+                return Conflict(ApiResponce<object>.Fail("ТО уже деактивировано", "CONFLICT"));
+            }
+            
+            
+            typeMaintenance.IsActive = false;
             await _context.SaveChangesAsync();
 
-            return NoContent();
+            return Ok(ApiResponce<object>.Ok(null!, "ТО деактивировано" ));
         }
 
         private bool TypeMaintenanceExists(int id)
